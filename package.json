@@ -1,0 +1,31 @@
+{
+  "name": "boilr",
+  "version": "0.1.0",
+  "description": "AI-powered CLI tool that generates production-ready, domain-aware SaaS boilerplate",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "boilr": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "pnpm run build"
+  },
+  "keywords": [
+    "cli",
+    "boilerplate",
+    "saas",
+    "scaffold",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
