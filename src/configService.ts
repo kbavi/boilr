@@ -15,10 +15,10 @@ export interface Config {
 
 export class ConfigService {
   /**
-   * Returns the path to the config file: ~/.boiler/config.yaml
+   * Returns the path to the config file: ~/.boilr/config.yaml
    */
   getConfigPath(): string {
-    return path.join(os.homedir(), '.boiler', 'config.yaml');
+    return path.join(os.homedir(), '.boilr', 'config.yaml');
   }
 
   /**
@@ -51,14 +51,14 @@ export class ConfigService {
   }
 
   /**
-   * Writes the config to ~/.boiler/config.yaml
+   * Writes the config to ~/.boilr/config.yaml
    * Creates the directory if it doesn't exist
    */
   async writeConfig(config: Config): Promise<void> {
     const configPath = this.getConfigPath();
     const configDir = path.dirname(configPath);
 
-    // Ensure the .boiler directory exists
+    // Ensure the .boilr directory exists
     await fs.ensureDir(configDir);
 
     // Convert config to YAML and write

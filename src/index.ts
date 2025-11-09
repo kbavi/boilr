@@ -172,7 +172,7 @@ program
           openai: 'OpenAI',
           anthropic: 'Claude',
         };
-        console.log(chalk.blue(`Welcome back to Boilr! 🪄 (Using ${providerNames[config.llmProvider]} from ~/.boiler/config.yaml)`));
+        console.log(chalk.blue(`Welcome back to Boilr! 🪄 (Using ${providerNames[config.llmProvider]} from ~/.boilr/config.yaml)`));
       } else {
         console.log(chalk.blue('Welcome to Boilr! 🪄'));
         console.log(chalk.blue('I see this is your first time. Let\'s set up your AI provider.'));
