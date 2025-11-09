@@ -1,0 +1,151 @@
+### **Tech Stack (Tool)**
+
+* **Language:** TypeScript
+* **Runtime:** Node.js
+* **CLI Framework:** `commander`
+* **Interactive UI:** `inquirer`, `ora`, `chalk`
+* **File System:** `fs-extra`, `yaml` (for config)
+* **OS Helpers:** `os` (to find home directory)
+* **Shell Commands:** `execa`
+* **AI SDK:** Vercel AI SDK (`ai`, `@ai-sdk/google`, `@ai-sdk/openai`, `@ai-sdk/anthropic`)
+* **Schema Validation:** `zod`
+
+---
+
+### **Milestone 1: The CLI "Shell" & Config Management**
+
+* **Goal:** To have a runnable CLI that manages user configuration (`~/.boiler/config.yaml`). It will implement the "first run" experience to acquire and save an API key and provider choice.
+* **Tasks:**
+    1.  **Project Setup:** Initialize `pnpm`, `tsconfig.json`, `package.json`.
+    2.  **Add Core Dependencies:** `typescript`, `ts-node`, `commander`, `inquirer`, `chalk`, `ora`, `fs-extra`, `yaml`, `os`.
+    3.  **Create `src/configService.ts`:**
+        * Define a `Config` interface (e.g., `{ llmProvider: 'gemini' | 'openai' | 'anthropic', apiKeys: { gemini?: string, ... } }`).
+        * `getConfigPath()`: Returns `path.join(os.homedir(), '.boiler', 'config.yaml')`.
+        * `configExists()`: Checks if the config file exists.
+        * `readConfig(): Promise<Config>`: Reads and parses the YAML.
+        * `writeConfig(config: Config): Promise<void>`: Uses `fs-extra.ensureDir` to create `~/.boiler` and then writes the YAML file.
+        * `runFirstRunWizard(): Promise<Config>`:
+            * Uses `inquirer` to ask: "Which LLM provider will you use? (Gemini, OpenAI, Claude)".
+            * Uses `inquirer` (`password` type) to ask for the corresponding API key.
+            * Saves and returns the new `Config` object.
+    4.  **Implement `commander`:**
+        * Set up the main `boilr` command.
+        * Add a separate `config` command (e.g., `boilr config`). This command simply re-runs the `runFirstRunWizard()` to allow users to change keys.
+    5.  **Update `src/index.ts` (Main Entry Point):**
+        * This is now the core logic:
+            * `if (command === 'config') { await configService.runFirstRunWizard(); return; }`
+            * `let config: Config;`
+            * `if (await configService.configExists()) { config = await configService.readConfig(); } else { config = await configService.runFirstRunWizard(); }`
+            * Pass `config` to the (not-yet-built) main app flow.
+    6.  **Test:** Run `pnpm link`. Test both `boilr` (triggers first-run) and `boilr config`. Verify the `~/.boiler/config.yaml` file is created and updated correctly.
+* **Definition of 'Complete':**
+    * Running the tool for the first time prompts the user for a provider and API key, saving them to `~/.boiler/config.yaml`.
+    * Running the tool subsequently *skips* this prompt.
+    * Running `boilr config` *forces* the prompt to run again, updating the config.
+
+---
+
+### **Milestone 2: The "AI Brain" (Vercel AI SDK)**
+
+* **Goal:** To use the Vercel AI SDK and the user's saved config to implement the core `generateSchema` and `reviseSchema` functions.
+* **Tasks:**
+    1.  **Add Dependencies:** `ai`, `@ai-sdk/google`, `@ai-sdk/openai`, `@ai-sdk/anthropic`, `zod`.
+    2.  **Define Abstract Schema (with `zod`):**
+        * Create `src/schemaTypes.ts`.
+        * Define the `zod` schema for your `AbstractSchema`. (e.g., `z.object({ models: z.array(z.object({ name: z.string(), fields: ... })) })`).
+    3.  **Create `src/aiService.ts`:**
+        * Create an `AiService` class. The constructor will take the `Config` object from Milestone 1.
+        * `private initializeModel()`: A method that reads `config.llmProvider` and `config.apiKeys` and returns the correct, initialized Vercel AI SDK client (e.g., `createGoogleGenerativeAI()`, `createOpenAI()`, etc.).
+    4.  **Implement `generateSchema(idea: string)`:**
+        * Gets the initialized model.
+        * Writes the "You are a senior architect..." system prompt.
+        * Calls `generateText` from the Vercel AI SDK.
+        * **Crucially, use the `as: z.object(YourZodSchema)` option.** This will enforce that the LLM *must* return valid JSON matching your `zod` schema, saving you all parsing logic.
+    5.  **Implement `reviseSchema(schema: AbstractSchema, request: string)`:**
+        * Same as above. Passes the current schema (as JSON) and the user's text request into the prompt.
+        * Also uses `as: z.object(YourZodSchema)` to get the new, revised schema back.
+    6.  **Integrate into CLI:**
+        * In `index.ts`, after getting the `config`, instantiate `const ai = new AiService(config)`.
+        * Call `ai.generateSchema(idea)` (with a real `ora` spinner).
+        * Pretty-print the returned abstract schema.
+        * Implement the `inquirer` loop ("Approve / Revise") that calls `ai.reviseSchema` until the user approves.
+* **Definition of 'Complete':**
+    * The CLI uses the saved API key to successfully call the chosen provider (Gemini, OpenAI, or Claude).
+    * It reliably generates an abstract schema and can perform at least one revision loop, all using the Vercel AI SDK and `zod` for validation.
+
+---
+
+### **Milestone 3: The "Static Template" Scaffolder**
+
+* **Goal:** To create the "golden copy" of the project that will be generated.
+* **Tasks:**
+    1.  **Create `templates/` folder:** In your CLI project's root.
+    2.  **Build the Template:** Create the complete, working Next.js + Clerk + Drizzle + Postgres base project inside `templates/`. This includes `package.json`, `tailwind.config.ts`, Clerk provider setup, Drizzle config, `.gitignore`, etc.
+    3.  **Implement Scaffolding Function:**
+        * Create a function `scaffoldBase(projectName: string)`.
+        * This function uses `fs-extra.copy('templates/', projectName)`.
+* **Definition of 'Complete':**
+    * The CLI can (temporarily) be modified to skip to this step.
+    * It successfully creates a new folder (`./my-clinic-app`) containing a *runnable* copy of the Next.js template.
+
+---
+
+### **Milestone 4: Integration (Dynamic Scaffolding)**
+
+* **Goal:** To combine the AI-generated schema (M2) with the static template (M3) to create the dynamic, domain-specific files.
+* **Tasks:**
+    1.  **Implement `translateToDrizzle(schema: AbstractSchema)`:**
+        * In `aiService.ts`, add this new method.
+        * It will use the initialized model and `generateText`.
+        * Prompt: "You are a Drizzle ORM expert... Given this abstract schema [JSON], write the complete `db/schema.ts` file...".
+        * This call *does not* use the `zod` schema (it expects plain text code as output).
+    2.  **Implement `generateApiRoutes(schema: AbstractSchema)`:**
+        * In `aiService.ts`, add this method.
+        * Prompt: "Given this abstract schema, generate basic CRUD Next.js App Router API routes... Return an array of objects `{ filename: string, content: string }`...".
+        * Use `as: 'json'` or a `zod` schema for an array of file objects.
+    3.  **Implement `generatePages(schema: AbstractSchema)`:** (Simple, non-AI function).
+    4.  **Update Main Flow:** Tie it all together:
+        * Run M1/M2 flow to get the approved `AbstractSchema`.
+        * Call `scaffoldBase` (M3).
+        * Call `ai.translateToDrizzle` -> `fs.writeFile` to *overwrite* `projectName/db/schema.ts`.
+        * Call `ai.generateApiRoutes` -> loop and `fs.writeFile` to create `projectName/app/api/...`.
+        * Call `generatePages` -> loop and `fs.writeFile` to create `projectName/app/...`.
+* **Definition of 'Complete':**
+    * A user can run the *full* CLI flow.
+    * The resulting project folder contains the static template *plus* the dynamically generated `schema.ts`, API routes, and placeholder pages, all based on the user's idea and chosen LLM.
+
+---
+
+### **Milestone 5: Handoff & Polish**
+
+* **Goal:** To finish the user experience by installing dependencies and generating the handoff documents using the user's AI key.
+* **Tasks:**
+    1.  **Implement `pnpm install`:**
+        * Add `execa` dependency.
+        * After scaffolding, call `execa('pnpm', ['install'], { cwd: projectName })` inside an `ora` spinner.
+    2.  **Implement `README.md` Generator:** (Simple file write).
+    3.  **Implement `.agent/context.md` Generator:**
+        * In `aiService.ts`, create `generateProductBrief(...)`.
+        * This method uses the initialized model and `generateText` with the "Senior Product Manager" prompt.
+        * Write the result to `projectName/.agent/context.md`.
+    4.  **Error Handling:** Wrap all AI calls, file ops, and `execa` in `try/catch` blocks.
+        * If an AI call fails (e.g., 401 Unauthorized), provide a helpful error: `Error: AI call failed. Your API key for [provider] seems to be invalid. Please run 'boilr config' to update it.`.
+* **Definition of 'Complete':**
+    * The CLI generates the project, runs `pnpm install`, and exits gracefully.
+    * The generated project contains both `README.md` and `.agent/context.md`.
+    * Invalid API keys produce a helpful error message instead of a raw crash.
+
+---
+
+### **Milestone 6: Packaging & Public Release**
+
+* **Goal:** To publish the tool on `npm`.
+* **Tasks:**
+    1.  **Finalize `package.json`:**
+        * Add `yaml`, `ai`, `@ai-sdk/google`, `@ai-sdk/openai`, `@ai-sdk/anthropic`, `zod`, etc., to `dependencies`.
+        * Add `commander`, `inquirer`, etc., to `dependencies`.
+        * Ensure `bin`, `files`, `repository` fields are correct.
+    2.  **Add Build Scripts:** `build` (`tsc`) and `prepublishOnly` (`pnpm run build`).
+    3.  **Publish:** `npm login` and `npm publish`.
+* **Definition of 'Complete':**
+    * Anyone can run `npx boilr` and successfully generate a project.

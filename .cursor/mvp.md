@@ -1,0 +1,211 @@
+### **MVP Document: `boilr`**
+
+### 1\. Project Vision & Goal
+
+  * **Vision:** To build an AI-powered CLI tool that generates a production-ready, domain-aware SaaS boilerplate.
+  * **Goal:** To take a developer from a high-level *app idea* (e.g., "a clinic appointment app") to a fully scaffolded, ready-to-code project in under 5 minutes. The developer uses their own AI provider (Gemini, OpenAI, or Claude), and the tool's output allows them to skip setup and start working immediately on business logic.
+
+### 2\. Core User Value Proposition
+
+1.  **Eliminates Setup Fatigue:** Automates the entire boilerplate setup, including the tech stack, auth configuration, ORM setup, and basic API routes.
+2.  **Provides Domain-Specific Scaffolding:** Understands the user's *idea* and generates the necessary database models (e.g., `Patients`, `Appointments`) and API endpoints.
+3.  **Flexible & Secure (BYOK):** Puts the user in control. They bring their own AI provider and API key. The tool securely saves this configuration locally, so they are not reliant on a third-party service.
+4.  **Creates a Product-Centric Handoff:** Generates a "Product Vision" document (`.agent/context.md`) that serves as a perfect starting context for the developer or their AI coding assistant.
+
+### 3\. Key Features (MVP Scope)
+
+  * **Interactive CLI Wizard:** A step-by-step terminal interface.
+  * **Provider-Agnostic AI (BYOK):**
+      * Supports multiple LLM providers: **Gemini, OpenAI (GPT), and Anthropic (Claude)**.
+      * Leverages the **Vercel AI SDK** for a unified, provider-agnostic interface.
+  * **Secure Config Management:**
+      * On first run, prompts the user to select their provider and enter their API key.
+      * Securely saves this configuration in `~/.boiler/config.yaml`.
+      * Subsequent runs automatically read the config, providing a seamless experience.
+  * **Config Command (`boilr config`):**
+      * A dedicated command (`boilr config`) allows users to update their provider or API key at any time.
+  * **Robust AI Schema Generation:**
+      * Takes a natural language app idea (e.g., "clinic appointment app") and generates an *abstract, database-agnostic* schema.
+      * Uses **Zod** with the Vercel AI SDK (`generateText({ as: zodSchema })`) to *guarantee* the AI returns a valid, parsable schema object, eliminating runtime errors.
+  * **Interactive Schema Revision:**
+      * The user is shown the abstract schema (e.g., `Model: patients, fields: name:text, email:text`).
+      * The user can approve it or request changes in natural language (e.g., "Add 'dateOfBirth:date' to patients").
+      * The tool enters a revision loop until the user approves the schema.
+  * **Automated Scaffolding:**
+      * **AI Code Translation:** Translates the approved *abstract* schema into Drizzle/Postgres syntax.
+      * **File Generation:** Builds the project directory with the base template, AI-generated schema, AI-generated CRUD API routes, and placeholder pages.
+  * **Project Finalization:**
+      * Runs `npm install` automatically.
+      * Generates the two key handoff documents (`README.md` and `.agent/context.md`).
+
+### 4\. Technical Stack (MVP)
+
+  * **CLI Framework:** Node.js, TypeScript
+  * **Command Parsing:** `commander`
+  * **Interactive UI:** `inquirer` (prompts), `ora` (spinners), `chalk` (colors)
+  * **Config & File System:** `fs-extra` (file ops), `yaml` (for config), `os` (for home directory)
+  * **Shell Commands:** `execa` (for running `npm install`)
+  * **AI SDK:** Vercel AI SDK (`ai`, `@ai-sdk/google`, `@ai-sdk/openai`, `@ai-sdk/anthropic`)
+  * **Schema Validation:** `zod`
+
+### 5\. The Core User Flow (Step-by-Step)
+
+This section details the new onboarding and standard run experiences.
+
+#### Flow A: The "First Run" Experience (Config Setup)
+
+This flow executes when `~/.boiler/config.yaml` is not found.
+
+1.  **Initialization:**
+
+      * User runs `npx boilr` in their terminal.
+      * Tool: `Welcome to Boilr! 🪄`
+      * Tool: `I see this is your first time. Let's set up your AI provider.`
+
+2.  **Provider & Key Setup (First-Run Wizard):**
+
+      * Tool: `Which LLM provider will you be using? (Use arrow keys)`
+          * `> Gemini (Google)`
+          * `   OpenAI (GPT) `
+          * `   Anthropic (Claude) `
+      * User selects `Gemini (Google)`.
+      * Tool: `Please enter your Google AI Studio API Key: (input is hidden)`
+      * User: `********************`
+      * Tool: `[Spinner] Saving configuration to ~/.boiler/config.yaml...`
+      * Tool: `[✓] Configuration saved!`
+
+3.  **Project Creation (Continues to Standard Flow):**
+
+      * Tool: `Now, let's build your new SaaS project.`
+      * Tool: `What's the name of your project? (e.g., my-clinic-app)`
+      * User: `clinic-manager`
+      * *(...the rest of the "Standard Run" flow (Step 3 onwards) executes...)*
+
+-----
+
+#### Flow B: The "Standard Run" Experience (Config Exists)
+
+This is the normal flow for a returning user.
+
+1.  **Initialization:**
+
+      * User runs `npx boilr`.
+      * Tool: `Welcome back to Boilr! 🪄 (Using Gemini from ~/.boiler/config.yaml)`
+
+2.  **Project Name:**
+
+      * Tool: `What's the name of your project? (e.g., my-clinic-app)`
+      * User: `clinic-manager`
+
+3.  **App Idea (The "Magic" Input):**
+
+      * Tool: `Great! Now, describe the app you want to build. (e.g., "A to-do app for teams")`
+      * User: `A clinic management app for clinicians to manage appointments and patients.`
+
+4.  **AI Schema Proposal (Abstract & Validated):**
+
+      * Tool: `[Spinner] Analyzing your idea and proposing a database schema (using Gemini)...`
+
+      * Tool:
+
+        > `Here's the schema I'm proposing:`
+
+        > ```
+        > Model: patients
+        >   - id: serial (primary_key)
+        >   - name: text (not_null)
+        >   - email: text (unique, not_null)
+        > ```
+
+        > Model: appointments
+
+        >   - id: serial (primary\_key)
+        >   - patient\_id: integer (references: patients.id)
+        >   - start\_time: timestamp (not\_null)
+        >   - notes: text
+
+        > <!-- end list -->
+
+        > ```
+        > `Does this look right? You can approve it or suggest changes.`
+        > `(e.g., "Looks good", "Add 'dateOfBirth:date' to patients")`
+        > ```
+
+5.  **Interactive Revision Loop:**
+
+      * User: `Add a 'status' text field to appointments with a default of 'scheduled'.`
+      * Tool: `[Spinner] Revising schema (using Gemini)...`
+      * Tool:
+        > `Got it! Here are the updates:`
+        > ```
+        > Model: appointments
+        >   ... (other fields) ...
+        >   - status: text (default: 'scheduled')  <-- ADDED
+        > ```
+        > `Anything else? (e.g., "Looks good", or more changes)`
+      * User: `Looks good`
+
+6.  **Scaffolding & Handoff:**
+
+      * Tool: `[✓] Schema approved! Ready to build your project. (Y/n)`
+      * User: `Y`
+      * Tool:
+        > `[Spinner] 🚀 Building your 'clinic-manager' project...`
+        > `[Spinner]  Translating abstract schema to Drizzle/Postgres (using Gemini)...`
+        > `[✓] Created Next.js + Clerk + Drizzle project`
+        > `[✓] Injected Drizzle schema file`
+        > `[Spinner]  Generating API routes and product brief (using Gemini)...`
+        > `[✓] Generated 2 CRUD API routes`
+        > `[✓] Created 3 placeholder pages (/dashboard, /patients, /appointments)`
+        > `[Spinner] 📦 Running npm install (this might take a minute)...`
+        > `[✓] Generated technical README.md`
+        > `[✓] Generated product vision in .agent/context.md`
+      * Tool:
+        > `✨ Success! Your project "clinic-manager" is ready.`
+        > `To start:`
+        > `   1. cd clinic-manager `
+        > `   2. Update .env with your Clerk keys and Postgres URL. `
+        > `   3. Run: npx drizzle-kit push:pg `
+        > `   4. Run: npm run dev `
+
+-----
+
+#### **Flow C: The "Config Update" Experience**
+
+1.  **Initialization:**
+      * User runs `boilr config` (or `npx boilr config`).
+      * Tool: `Let's update your AI provider configuration.`
+2.  **Wizard:**
+      * The tool re-runs the "First Run" wizard (Flow A, Step 2).
+      * The user can select a new provider (e.g., Claude) and enter their new key.
+3.  **Completion:**
+      * Tool: `[Spinner] Updating configuration at ~/.boiler/config.yaml...`
+      * Tool: `[✓] Configuration saved! Boilr will now use Claude.`
+
+### 6\. Key Artifacts (The Handoff)
+
+1.  **`README.md` (Technical Guide)**
+
+      * "How to get started."
+      * Instructions for setting up `.env` (Clerk keys, `DATABASE_URL`).
+      * Command to run DB migrations (`npx drizzle-kit push:pg`).
+      * Command to run the dev server (`npm run dev`).
+
+2.  **`.agent/context.md` (Product Vision Guide)**
+
+      * **Original Prompt:** The user's initial app idea.
+      * **Business Problem:** (AI-generated) "This project solves the problem of... for (user)..."
+      * **Value Proposition:** (AI-generated) "The core value is..."
+      * **Tech Stack:** Next.js, Clerk, Drizzle (Postgres).
+      * **Final Database Schema:** The *abstract* schema that was approved.
+      * **Generated API Endpoints:** A list of all created routes (e.g., `POST /api/patients`, `GET /api/patients/[id]`).
+      * **Generated Pages:** A list of all created placeholder pages.
+      * **Future Scope:** (AI-generated) "Suggested next steps include: building the appointment booking UI..."
+
+### 7\. Out of Scope (For MVP v1.0)
+
+  * **Payment Integration:** No Stripe setup.
+  * **Frontend UI Generation:** No AI-generated React components (only placeholder pages).
+  * **Stack Choices:** The stack is locked (Next.js, Clerk, Drizzle). No options for Prisma, Lucia, etc.
+  * **Deployment:** No `Dockerfile` or `vercel.json` generation.
+  * **Git:** Does not run `git init`.
